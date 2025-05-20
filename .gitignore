@@ -1,0 +1,7 @@
+# Ignore backup file
+..gitignore.un~
+.gitignore~
+
+# Ignore JetBrains IDE settings
+.idea/
+
