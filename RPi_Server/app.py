@@ -5,6 +5,7 @@ from ip_broadcast import *
 app = Flask(__name__)
 latest_data = {}
 
+
 @app.route('/')
 def index():
     html = '''
@@ -21,6 +22,23 @@ def receive_data():
     latest_data = request.get_json()
     print("Received data:", latest_data)
     return jsonify({"status": "OK", "received": latest_data})
+
+
+@app.route('/upload_data', methods=['POST'])
+def upload_data():
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing Authorization header"}), 401
+
+    token = auth_header.split(" ")[1]
+    if token not in valid_tokens:
+        return jsonify({"error": "Invalid token"}), 403
+
+    data = request.get_json()
+    print(f"[DATA] From {valid_tokens[token]['device_id']}: {data}")
+    return jsonify({"status": "OK"})
+
+
 
 @app.route('/api/last_data', methods=['GET'])
 def get_last_data():

@@ -4,6 +4,30 @@
 WiFiUDP Udp;
 const char *secret_key = "my_secret_key";
 
+const char* root_CA = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIDejCCAmKgAwIBAgIQf+UwvzMTQ77dghYQST2KGzANBgkqhkiG9w0BAQsFADBX
+MQswCQYDVQQGEwJCRTEZMBcGA1UEChMQR2xvYmFsU2lnbiBudi1zYTEQMA4GA1UE
+CxMHUm9vdCBDQTEbMBkGA1UEAxMSR2xvYmFsU2lnbiBSb290IENBMB4XDTIzMTEx
+NTAzNDMyMVoXDTI4MDEyODAwMDA0MlowRzELMAkGA1UEBhMCVVMxIjAgBgNVBAoT
+GUdvb2dsZSBUcnVzdCBTZXJ2aWNlcyBMTEMxFDASBgNVBAMTC0dUUyBSb290IFI0
+MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE83Rzp2iLYK5DuDXFgTB7S0md+8Fhzube
+Rr1r1WEYNa5A3XP3iZEwWus87oV8okB2O6nGuEfYKueSkWpz6bFyOZ8pn6KY019e
+WIZlD6GEZQbR3IvJx3PIjGov5cSr0R2Ko4H/MIH8MA4GA1UdDwEB/wQEAwIBhjAd
+BgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAd
+BgNVHQ4EFgQUgEzW63T/STaj1dj8tT7FavCUHYwwHwYDVR0jBBgwFoAUYHtmGkUN
+l8qJUC99BM00qP/8/UswNgYIKwYBBQUHAQEEKjAoMCYGCCsGAQUFBzAChhpodHRw
+Oi8vaS5wa2kuZ29vZy9nc3IxLmNydDAtBgNVHR8EJjAkMCKgIKAehhxodHRwOi8v
+Yy5wa2kuZ29vZy9yL2dzcjEuY3JsMBMGA1UdIAQMMAowCAYGZ4EMAQIBMA0GCSqG
+SIb3DQEBCwUAA4IBAQAYQrsPBtYDh5bjP2OBDwmkoWhIDDkic574y04tfzHpn+cJ
+odI2D4SseesQ6bDrarZ7C30ddLibZatoKiws3UL9xnELz4ct92vID24FfVbiI1hY
++SW6FoVHkNeWIP0GCbaM4C6uVdF5dTUsMVs/ZbzNnIdCp5Gxmx5ejvEau8otR/Cs
+kGN+hr/W5GvT1tMBjgWKZ1i4//emhA1JG1BbPzoLJQvyEotc03lXjTaCzv8mEbep
+8RqZ7a2CPsgRbuvTPBwcOMBBmuFeU88+FSBX6+7iP0il8b4Z0QFqIwwMHfs/L6K1
+vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
+-----END CERTIFICATE-----
+)EOF";
+
 
 void connectWPA2(const char *ssid, const char *username, const char *password) {
 #if defined(ESP8266)
@@ -84,53 +108,92 @@ String generateHMAC(const String &message, const String &key) {
 
 
 void showHttpData(String url) {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    WiFiClient client;
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected");
+    return;
+  }
 
-    http.begin(client, url);
+  HTTPClient http;
 
-    int httpCode = http.GET();
-    if (httpCode > 0) {
+  if (url.startsWith("https://")) {
+    WiFiClientSecure secureClient;
+    // secureClient.setInsecure();  // 測試用，正式請使用憑證
+    secureClient.setCACert(root_CA);
+    if (http.begin(secureClient, url)) {
+      int httpCode = http.GET();
+      handleHttpGetResponse(http, httpCode);
+    } else {
+      Serial.println("Unable to connect to HTTPS server.");
+    }
+  } else {
+    WiFiClient plainClient;
+    if (http.begin(plainClient, url)) {
+      int httpCode = http.GET();
+      handleHttpGetResponse(http, httpCode);
+    } else {
+      Serial.println("Unable to connect to HTTP server.");
+    }
+  }
+}
+
+
+void handleHttpGetResponse(HTTPClient &http, int httpCode) {
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+    if (httpCode == HTTP_CODE_OK) {
       String payload = http.getString();
       Serial.println("Received data: " + payload);
     } else {
-      Serial.println("Error on HTTP request");
+      Serial.println("GET request failed or not 200 OK.");
     }
-
-    http.end();
+  } else {
+    Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
+
+  http.end();
 }
 
 
 
 void sendHttpData(String payload, String targetUrl) {
-  WiFiClient newClient;
   HTTPClient http;
+  Serial.println("Payload: " + payload);
 
-  yield();
-
-  if (http.begin(newClient, targetUrl)) {
-    http.addHeader("Content-Type", "application/json");
-    int httpCode = http.POST(payload);
-    yield();
-
-    if (httpCode > 0) {
-      Serial.printf("[HTTP] POST... code: %d\n", httpCode);
-      if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
-        String response = http.getString();
-        Serial.println("Response: " + response);
-      }
+  if (targetUrl.startsWith("https://")) {
+    WiFiClientSecure secureClient;
+    // secureClient.setInsecure();  // 測試用途
+    secureClient.setCACert(root_CA);
+    if (http.begin(secureClient, targetUrl)) {
+      http.addHeader("Content-Type", "application/json");
+      int httpCode = http.POST(payload);
+      handleHttpPostResponse(http, httpCode);
     } else {
-      Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      Serial.println("Unable to connect to HTTPS server.");
     }
-
-    http.end();
   } else {
-    Serial.println("Unable to connect to server.");
+    WiFiClient plainClient;
+    if (http.begin(plainClient, targetUrl)) {
+      http.addHeader("Content-Type", "application/json");
+      int httpCode = http.POST(payload);
+      handleHttpPostResponse(http, httpCode);
+    } else {
+      Serial.println("Unable to connect to HTTP server.");
+    }
+  }
+}
+
+void handleHttpPostResponse(HTTPClient &http, int httpCode) {
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] POST... code: %d\n", httpCode);
+    if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
+      String response = http.getString();
+      Serial.println("Response: " + response);
+    }
+  } else {
+    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
 
-  yield();
+  http.end();
 }
 
 

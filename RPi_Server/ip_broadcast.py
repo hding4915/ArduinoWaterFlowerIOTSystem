@@ -2,6 +2,8 @@ import time
 import hashlib
 import hmac
 import socket
+import secrets
+from jwt_token import *
 from threading import Event
 
 
@@ -10,6 +12,7 @@ esp1_confirmed = False
 esp2_confirmed = False
 esp1_confirmed_event = Event()
 esp2_confirmed_event = Event()
+valid_tokens = {}
 
 
 def get_local_ip():
@@ -53,6 +56,10 @@ def udp_listen_for_confirmation():
                 received_hmac = parts[3]
 
                 if verify_hmac(device_id, timestamp, received_hmac):
+                    token = generate_jwt(device_id)
+                    response = f"JWT|{device_id}|{token}"
+                    sock.sendto(response.encode(), addr)
+
                     if device_id == "esp8266_001":
                         esp1_confirmed = True
                         esp1_confirmed_event.set()

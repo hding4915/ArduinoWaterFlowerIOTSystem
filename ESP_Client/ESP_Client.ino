@@ -4,19 +4,19 @@
 
 const char* ssid = "HDING49_2.4G";
 const char* password = "0413wifi";
-const char* deviceID = "esp8266_001";
+const char* deviceID = "esp8266_002";
 
-const int serverPort = 8000;
+const int serverPort = 443;
 
 
 char incomingPacket[256];
 const int udpPort = 4210;
 const int confirmPort = 4211;
-boolean recvServerIP = false;
+boolean recvServerIP = true;
 
 
 
-String serverIP = "";
+String serverIP = "esprun.hding49.uk";
 String targetUrl = "";
 String recvUrl = "";
 String confirmUrl = "";
@@ -38,6 +38,7 @@ void setup() {
 
 
 char recv;
+bool is_set = false;
 
 void loop() {
   if (!recvServerIP) {
@@ -72,15 +73,15 @@ void loop() {
           Serial.println("抓到Server IP：" + serverIP);
 
           sendAuthentication(serverIPAddr, confirmPort, deviceID);
-        //   sendAuthentication(serverIPAddr, confirmPort, "esp8266_002");
+          //   sendAuthentication(serverIPAddr, confirmPort, "esp8266_002");
 
 
           Serial.println("[ESP] 🔁 傳送確認訊息到 RPi");
 
           recvServerIP = true;
 
-          targetUrl = "http://" + serverIP + ":" + String(serverPort) + "/api/data";
-          recvUrl = "http://" + serverIP + ":" + String(serverPort) + "/api/last_data";
+          targetUrl = "https://" + serverIP + ":" + String(serverPort) + "/api/data";
+          recvUrl = "https://" + serverIP + ":" + String(serverPort) + "/api/last_data";
 
 
           delay(1000);  // 可選擇結束 loop 或進入主流程
@@ -91,12 +92,19 @@ void loop() {
     }
 
   } else {
+    if (!is_set) {
+      targetUrl = "https://" + serverIP + ":" + String(serverPort) + "/api/data";
+      recvUrl = "https://" + serverIP + ":" + String(serverPort) + "/api/last_data";
+      Serial.println(targetUrl);
+      Serial.println(recvUrl);
+      is_set = true;
+    }
     int sensorVal = analogRead(A0);
     Serial.println("humidity: " + String(sensorVal));
     if (Serial.available() > 0) {
       recv = Serial.read();
       if (recv == '5') {
-        sendHumiHttpData(targetUrl, sensorVal);
+        sendHumiHttpData(deviceID, targetUrl, sensorVal);
       } else if (recv == '6') {
         showHttpData(recvUrl);
       }

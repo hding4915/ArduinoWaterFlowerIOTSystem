@@ -20,11 +20,16 @@
   }
 #endif
 
+#include <WiFiClientSecure.h>
+
 #include "Arduino.h"
 
 
 extern WiFiUDP Udp;
 extern const char* secret_key;
+
+#pragma once
+extern const char* root_CA;
 
 
 void connectWPA2(const char *ssid, const char *username, const char *password);
@@ -33,5 +38,7 @@ String generateHMAC(const String& message, const String& key);
 void showHttpData(String url);
 void sendHttpData(String payload, String targetUrl);
 void sendHumiHttpData(String deviceID, String targetUrl, int humi);
+void handleHttpPostResponse(HTTPClient &http, int httpCode);
+void handleHttpGetResponse(HTTPClient &http, int httpCode);
 
 #endif
