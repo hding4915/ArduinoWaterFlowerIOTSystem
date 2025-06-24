@@ -43,8 +43,11 @@ void setup() {
     pinMode(A0, INPUT);
     pinMode(A1, INPUT);
     pinMode(42, OUTPUT);
+    pinMode(43, OUTPUT);
 
-    digitalWrite(42, HIGH);
+
+    digitalWrite(42, LOW);
+    digitalWrite(43, LOW);
 
     Serial.begin(9600);
     controller.motor_direction_setter(1, L298N1_FORWARD, L298N1_BACK);
@@ -71,69 +74,82 @@ int slow = 30;
 bool is_flood = false;
 bool timer_start = false;
 bool to_go = true;
+bool need_flood = false;
 
 unsigned long timer;
+String recv;
+int humidity = -1;
+int counterH = 0;
+
 
 void loop() {
-
-    // Serial.println("right: " + String(digitalRead(A1)) + ", left: " + String(digitalRead(A0)));
-
-    right = digitalRead(A0);
-    left = digitalRead(A1);
-    Serial.println("left: " + String(left) + ", ana: " + String(analogRead(A1)) + ", right: " + String(right) + ", ana: " + String(analogRead(A0)));
-
-    if (left && !right && to_go) {
-        is_flood = false;
-        timer_start = false;
-        controller.moveMotor(motor1, "forward", slow);
-        controller.moveMotor(motor2, "forward", fast);
-        controller.moveMotor(motor3, "forward", slow);
-        controller.moveMotor(motor4, "forward", fast);
-    } else if (!left && right && to_go) {
-        is_flood = false;
-        timer_start = false;
-        controller.moveMotor(motor1, "forward", fast);
-        controller.moveMotor(motor2, "forward", slow);
-        controller.moveMotor(motor3, "forward", fast);
-        controller.moveMotor(motor4, "forward", slow);
-    } else if (left && right) {
-        controller.stopAll();
-        if (!timer_start) {
-            timer = millis();
-            timer_start = true;
+    if (!need_flood && Serial.available()) {
+        recv = Serial.readStringUntil('>');
+        if (recv.startsWith("<H:")) {
+            String humStr = recv.substring(3);
+            humidity = humStr.toInt();
+            Serial.print("Humidity: ");
+            Serial.println(humidity);
         }
-
-        if (!is_flood && (millis() - timer) > 800) {
-            to_go = false;
-            Serial.println("flood!!!!");
-            controller.moveMotor(motor2, "forward", 90);
-            controller.moveMotor(motor4, "forward", 90);
-            controller.moveMotor(motor1, "back", 90);
-            controller.moveMotor(motor3, "back", 90);
-            delay(1000);
-            controller.stopAll();
-            delay(1000);
-            digitalWrite(42, LOW);
-            delay(2000);
-            digitalWrite(42, HIGH);
-            delay(4000);
-            controller.moveMotor(motor2, "back", 90);
-            controller.moveMotor(motor4, "back", 90);
-            controller.moveMotor(motor1, "forward", 90);
-            controller.moveMotor(motor3, "forward", 90);
-            delay(1000);
-            controller.stopAll();
-            delay(500);
-            is_flood = true;
-            to_go = true;
-        }
-
-
-
-    } else {
-        is_flood = false;
-        timer_start = false;
-
     }
 
+    if (humidity > 250) {
+        need_flood = true;
+    }
+
+    if (need_flood) {
+
+        right = digitalRead(A0);
+        left = digitalRead(A1);
+        Serial.println("left: " + String(left) + ", ana: " + String(analogRead(A1)) + ", right: " + String(right) + ", ana: " + String(analogRead(A0)));
+
+        if (left && !right && to_go) {
+            is_flood = false;
+            timer_start = false;
+            controller.moveMotor(motor1, "forward", slow);
+            controller.moveMotor(motor2, "forward", fast);
+            controller.moveMotor(motor3, "forward", slow);
+            controller.moveMotor(motor4, "forward", fast);
+        } else if (!left && right && to_go) {
+            is_flood = false;
+            timer_start = false;
+            controller.moveMotor(motor1, "forward", fast);
+            controller.moveMotor(motor2, "forward", slow);
+            controller.moveMotor(motor3, "forward", fast);
+            controller.moveMotor(motor4, "forward", slow);
+        } else if (left && right) {
+            controller.stopAll();
+            if (!timer_start) {
+                timer = millis();
+                timer_start = true;
+            }
+
+            if (!is_flood && (millis() - timer) > 800) {
+                to_go = false;
+                Serial.println("flood!!!!");
+                delay(500);
+                digitalWrite(42, HIGH);
+                digitalWrite(43, LOW);
+                delay(5000);
+                digitalWrite(42, LOW);
+                digitalWrite(43, LOW);
+                delay(1000);
+                is_flood = true;
+                to_go = true;
+                counterH++;
+                if (counterH == 4) {
+                    need_flood = false;
+                    counterH = 0;
+                }
+                controller.moveForward(50);
+                delay(600);
+            }
+
+
+
+        } else {
+            is_flood = false;
+            timer_start = false;
+        }
+    }
 }
